@@ -1,0 +1,113 @@
+@font-face{
+    font-family: 'pixel';
+    src: url('../fonts/dotted/DottedSongtiSquareRegular.otf');
+}
+
+* {
+    margin: 0;
+    padding: 0;
+}
+html body {
+    font-family: 'pixel';
+    font-size: 20px;
+    background: url('../img/bg-px2.png');
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+.main {
+    display: flex;
+}
+.left-area {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px;
+    line-height: 1.5;
+    font-size: 25px;
+    align-items: center;
+}
+.left-area .save-box {
+    width: calc(80% - 20px);
+    background: url('../img/bg-px3.png');
+    border-radius: 5px;
+    padding: 10px;
+}
+.left-area .save-box #save-img {
+    width: 100%;
+    border-radius: 10px;
+    margin-top: 10px;
+}
+.left-area .img-border {
+    text-align: center;
+    width: 100%;
+    min-height: 300px;
+}
+.mid-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    flex-direction: column;
+}
+.mid-area canvas {
+    /* box-shadow: #DA8524; */
+    border-radius: 10px;
+    box-shadow: -1px 10px 60px 10px rgba(218,133,36,0.75);
+    -webkit-box-shadow: -1px 10px 60px 10px rgba(218,133,36,0.75);
+    -moz-box-shadow: -1px 10px 60px 10px rgba(218,133,36,0.75);
+}
+.right-area {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    flex-direction: column;
+}
+.right-area .notice {
+    background: url('../img/bg-px3.png');
+    width: calc(80% - 20px);
+    padding: 10px;
+    line-height: 1.5;
+    border-radius: 5px;
+    font-size: 25px;
+}
+.right-area .contr-list {
+    width: 80%;
+    margin-top: 10px;
+    line-height: 1.5;
+    font-size: 25px;
+}
+.left-area .save-box h2,
+.right-area .contr-list h2,
+.right-area .notice h2 {
+    text-align: center;
+}
+.right-area ul[name='color-box'] {
+    display: flex;
+    flex-wrap: wrap;
+    list-style-type: none;
+    justify-content: center;
+    padding: 5px;
+    margin: 5px;
+}
+.right-area ul[name='color-box'] li {
+    width: 40px;
+    height: 30px;
+    text-align: center;
+    line-height: 30px;
+    color: #909399;
+    font-weight: bolder;
+}
+.right-area ul[name='contribution-list'] {
+    text-align: left;
+    list-style-type: none;
+}
+.right-area ul[name='contribution-list'] li {
+    background: url('../img/bg-px3.png');
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 10px;
+}

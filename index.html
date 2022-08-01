@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>弹幕互动画画</title>
+    <link rel="stylesheet" href="./css/index.css">
+    <script src="./js/pako.min.js"></script>
+    <script src="./js/run.js"></script>
+    <script src="./js/ws.js"></script>
+    <script src="./js/konva.min.js"></script>
+    <script src="./js/moment.min.js"></script>
+    <script src="./js/anime.min.js"></script>
+</head>
+<body>
+    <div class="main">
+        <div class="left-area">
+            <div class="save-box">
+                <h2>保存画稿</h2>
+                保存画稿指令：<b>save</b><br>
+                仅限贡献榜观众保存，所存画稿将以私信形式发送
+                <div class="img-border">
+                    <img src="" id="save-img">
+                    <span id="save-name"></span>
+                </div>
+            </div>
+        </div>
+        <div class="mid-area">
+            <h1 class="title" style="color: #DA8524; margin-bottom: 50px; margin-left: -50px; font-size: 50px;">弹幕互动画画</h1>
+            <div id="container"></div>
+        </div>
+        <div class="right-area">
+            <div class="notice">
+                <h2>公告</h2>
+                <div>
+                    弹幕发送指令：<b>行#列#色号</b><br>
+                    示例：<b>1#1#1</b><br>
+                    行数范围 <b>1~25</b><br>
+                    列数范围 <b>1~25</b><br>
+                    色板范围 如下：<br>
+                </div>
+                <h2>色板</h2>
+                <ul name="color-box"></ul>
+            </div>
+            <div class="contr-list">
+                <h2>贡献榜</h2>
+                <ul name="contribution-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="./js/anime.index.js"></script>
+    <script type="text/javascript">
+        // TODO启动websocket;
+        WebSocketTest();
+
+        const bgWidth = 750, bgHeight = 750;
+        var timer = null;
+        var ws;
+        let colorMap = ['#f5f5dc', '#000000', '#ffebdc', '#0000ff', '#a52a2a', '#00008b', '#006400', '#8b0000', '#ffd700', '#808080', '#008000', '#fffff0',
+                        '#90ee90', '#d3d3d3', '#ffa500', '#ffc8cb', '#b0e0e6', '#800080', '#ff0000', '#c0c0c0', '#d2b48c', '#ffffff', '#ffff00']
+        let contrList = {}; // 贡献数统计
+        let contrListTop = []; // 贡献榜缓存
+
+        // 渲染色板区域
+        let colorHtml = '';
+        for(let i=0; i<colorMap.length; i++) {
+            colorHtml += `<li style="background-color: ${colorMap[i]};">${i+1}</li>`
+        }
+        document.getElementsByName('color-box')[0].innerHTML = colorHtml;
+
+        // 1.创建舞台
+        var stage = new Konva.Stage({
+            container: 'container',
+            width: bgWidth,
+            height: bgHeight,
+        })
+        // 2.创建层
+        var layer = new Konva.Layer();
+        // 3.将层添加至舞台
+        stage.add(layer);
+        // 创建run代理对象，操作layer
+        const o = {
+            bgWidth,
+            bgHeight,
+            boxSize: 30, // 像素宽高
+        }
+        let a = new run(layer, o)
+        // 将层渲染至舞台
+        layer.draw();
+
+        /**
+         * 相关调用方法
+         **/
+        function WebSocketTest() {
+            var roomid = '';
+            var url = 'wss://broadcastlv.chat.bilibili.com/sub';
+
+            var json = {
+                "uid": 0,
+                "roomid": parseInt(roomid), //注意roomid是数字
+                "protover": 1,
+                "platform": "web",
+                "clientver": "1.4.0"
+            }
+            console.log(JSON.stringify(json));
+
+            if (ws) //防止重复连接
+                ws.close()
+            // 打开一个 web socket
+            ws = new WebSocket(url);
+
+            // WebSocket连接成功回调
+            ws.onopen = function () {
+                console.log("WebSocket 已连接上");
+                //组合认证数据包 并发送
+                ws.send(getCertification(JSON.stringify(json)).buffer);
+                //心跳包的定时器
+                timer = setInterval(function () { //定时器 注意声明timer变量
+                    var n1 = new ArrayBuffer(16)
+                    var i = new DataView(n1);
+                    i.setUint32(0, 0),  //封包总大小
+                        i.setUint16(4, 16), //头部长度
+                        i.setUint16(6, 1), //协议版本
+                        i.setUint32(8, 2),  // 操作码 2 心跳包
+                        i.setUint32(12, 1); //就1
+                    ws.send(i.buffer); //发送
+                }, 30000)   //30秒
+            };
+
+            // WebSocket连接关闭回调
+            ws.onclose = function () {
+                console.log("连接已关闭");
+                //要在连接关闭的时候停止 心跳包的 定时器
+                if (timer != null)
+                    clearInterval(timer);
+            };
+
+            //WebSocket接收数据回调
+            ws.onmessage = function (evt) {
+                var blob = evt.data;
+                //对数据进行解码 decode方法
+                decode(blob, function (packet) {
+                    //解码成功回调
+                    if (packet.op == 5) {
+                        //会同时有多个 数发过来 所以要循环
+                        for (let i = 0; i < packet.body.length; i++) {
+                            var element = packet.body[i];
+                            //cmd = DANMU_MSG 是弹幕
+                            if (element.cmd == "DANMU_MSG") {
+                                console.log(element.info[2][0] + '：' + element.info[2][1] + "：" + element.info[1]);
+                                handleMsg({ uid: element.info[2][0], name: element.info[2][1], msg: element.info[1]});
+                            }
+                            //cmd = INTERACT_WORD 有人进入直播了
+                            else if (element.cmd == "INTERACT_WORD") {
+                                // console.log("进入直播：" + element.data.uname);
+                            }
+                            //还有其他的
+                        }
+
+                    }
+                });
+            };
+        }
+
+        function handleMsg(o) {
+            let { msg, uid, name } = o;
+            // 规定格式：x#y#color ^(\d+#?){2}\d+$
+            var pattern = /^(\d+#?){2}\d+$/;
+
+            if ('save' == msg) {
+                // 不在贡献榜的不提供保存功能
+                let flag = false;
+                for (let i=0; i<contrListTop.length; i++) {
+                    if (contrListTop[i].uid == uid) flag = true;
+                }
+                if (!flag) return;
+                canvasToImg(uid);
+            } else if (pattern.test(msg)) {
+                let msgArr = msg.split('#');
+                const x = Number(msgArr[0]), y = Number(msgArr[1]), color = Number(msgArr[2]);
+                if (x < 1 || x > parseInt(bgWidth / o.boxSize)) return;
+                if (y < 1 || y > parseInt(bgHeight / o.boxSize)) return;
+                if (color < 1 || color > colorMap.length) return;
+                // 格式符合
+                a.toggleLocation(x, y, colorMap[color-1], name)
+                // 调用计数
+                handleContrList(o);
+            }
+        }
+
+        function handleContrList(o) {
+            const {uid, name} = o;
+            if (contrList[uid]) {
+                contrList[uid].count++
+            } else {
+                contrList[uid] = {
+                    uid: uid,
+                    name: name,
+                    count: 1
+                }
+            }
+            let arrayObj = [];
+            Object.keys(contrList).forEach((e) => {
+                arrayObj.push(contrList[e])
+            })
+            contrListTop = arrayObj.sort(function(a,b){return b.count-a.count}).slice(0, 5)
+            
+            let contrHtml = '';
+            for(let i=0; i<contrListTop.length; i++) {
+                contrHtml += `<li>${toChinesNum(i+1)}. <b>${contrListTop[i].name}</b> 贡献 <b>${contrListTop[i].count}</b> px</li>`
+            }
+            document.getElementsByName('contribution-list')[0].innerHTML = contrHtml;
+        }
+
+        function isNumber(v) {
+            return typeof v === 'number' && !isNaN(v)
+        }
+
+        /**
+         * canvas 转图片保存
+         */
+        function canvasToImg (uid) {
+            let dataURL = stage.toDataURL();
+            const name = `${uid}_${new Date().getTime()}`
+            document.getElementById('save-img').src = dataURL;
+            document.getElementById('save-name').innerHTML = `<b>${contrList[uid].name}</b>保存`
+            downloadURI(dataURL, name);
+        }
+        function downloadURI(uri, name) {
+            var link = document.createElement('a');
+            link.download = name;
+            link.href = uri;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            delete link;
+        }
+        //完成将 toChineseNum， 可以将数字转换成中文大写的表示，处理到万级别，例如 toChineseNum(12345)，返回 一万二千三百四十五。
+        const toChinesNum = (num) => {
+            let changeNum = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']; //changeNum[0] = "零"
+            let unit = ["", "十", "百", "千", "万"];
+            num = parseInt(num);
+            let getWan = (temp) => {
+                let strArr = temp.toString().split("").reverse();
+                let newNum = "";
+                for (var i = 0; i < strArr.length; i++) {
+                    newNum = (i == 0 && strArr[i] == 0 ? "" : (i > 0 && strArr[i] == 0 && strArr[i - 1] == 0 ? "" : changeNum[strArr[i]] + (strArr[i] == 0 ? unit[0] : unit[i]))) + newNum;
+                }
+                return newNum;
+            }
+            let overWan = Math.floor(num / 10000);
+            let noWan = num % 10000;
+            if (noWan.toString().length < 4) noWan = "0" + noWan;
+            return overWan ? getWan(overWan) + "万" + getWan(noWan) : getWan(num);   
+        }
+    </script>
+</body>
+</html>
